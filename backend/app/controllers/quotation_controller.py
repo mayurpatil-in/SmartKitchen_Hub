@@ -14,7 +14,7 @@ class QuotationController:
         self.quotations_schema = QuotationSchema(many=True)
 
     @jwt_required()
-    @role_required("Admin", "Sales Manager")
+    @role_required("Admin", "Sales Manager", "Customer")
     def get_quotations(self):
         """Fetches a list of historical B2B quotes."""
         status = request.args.get("status")
@@ -22,6 +22,23 @@ class QuotationController:
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 10, type=int)
         
+        claims = get_jwt()
+        if claims.get("role") == "Customer":
+            user_id = int(get_jwt_identity())
+            customer = self.quotation_service.customer_repo.get_by_user_id(user_id)
+            if not customer:
+                return jsonify({
+                    "success": True,
+                    "data": {
+                        "items": [],
+                        "total": 0,
+                        "pages": 0,
+                        "page": page,
+                        "per_page": per_page
+                    }
+                }), 200
+            customer_id = customer.id
+            
         pagination = self.quotation_service.search_quotations(
             status=status, 
             customer_id=customer_id, 
@@ -95,12 +112,21 @@ class QuotationController:
         }), 201
 
     @jwt_required()
-    @role_required("Admin", "Sales Manager")
+    @role_required("Admin", "Sales Manager", "Customer")
     def update_status(self, quotation_id):
         """Updates the status (Sent -> Approved/Rejected)."""
         data = request.get_json() or {}
         status = data.get("status")
         
+        claims = get_jwt()
+        if claims.get("role") == "Customer":
+            user_id = int(get_jwt_identity())
+            quotation = self.quotation_service.get_quotation(quotation_id)
+            if not quotation.customer or quotation.customer.user_id != user_id:
+                return jsonify({"success": False, "message": "Access denied."}), 403
+            if quotation.status != "Sent":
+                return jsonify({"success": False, "message": "Customers can only update status of 'Sent' quotations."}), 400
+                
         quotation = self.quotation_service.update_status(quotation_id, status)
         return jsonify({
             "success": True,
@@ -127,3 +153,76 @@ class QuotationController:
             as_attachment=True,
             download_name=f"Quotation_{quotation.quotation_number}.pdf"
         )
+
+    @jwt_required()
+    @role_required("Admin", "Sales Manager")
+    def update(self, quotation_id):
+        """Updates a Draft quotation details and items."""
+        data = request.get_json() or {}
+        
+        errors = self.quotation_schema.validate(data)
+        if errors:
+            return jsonify({"success": False, "message": "Validation failed.", "errors": errors}), 422
+            
+        valid_until_str = data.get("valid_until")
+        try:
+            if isinstance(valid_until_str, str):
+                valid_until = datetime.datetime.strptime(valid_until_str.split("T")[0], "%Y-%m-%d").date()
+            else:
+                valid_until = valid_until_str
+        except Exception:
+            return jsonify({"success": False, "message": "Invalid date format. Expected YYYY-MM-DD"}), 422
+            
+        quotation = self.quotation_service.update_quotation(
+            quotation_id=quotation_id,
+            customer_id=data.get("customer_id"),
+            valid_until=valid_until,
+            tax=data.get("tax", 0),
+            discount=data.get("discount", 0),
+            items=data.get("items"),
+            notes=data.get("notes")
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": "Quotation updated successfully.",
+            "data": self.quotation_schema.dump(quotation)
+        }), 200
+
+    @jwt_required()
+    @role_required("Admin", "Sales Manager")
+    def delete(self, quotation_id):
+        """Deletes a Draft quotation."""
+        self.quotation_service.delete_quotation(quotation_id)
+        return jsonify({
+            "success": True,
+            "message": "Quotation deleted successfully."
+        }), 200
+
+    @jwt_required()
+    @role_required("Admin", "Sales Manager")
+    def get_vendor_settings(self):
+        """Fetches the dynamic vendor configuration settings."""
+        from app.utils.vendor_config import load_vendor_settings
+        settings = load_vendor_settings()
+        return jsonify({
+            "success": True,
+            "data": settings
+        }), 200
+
+    @jwt_required()
+    @role_required("Admin")
+    def update_vendor_settings(self):
+        """Updates the dynamic vendor configuration settings, Admin only."""
+        from app.utils.vendor_config import save_vendor_settings
+        data = request.get_json() or {}
+        if not data.get("company_name"):
+            return jsonify({"success": False, "message": "Company Name is required."}), 400
+        
+        updated_settings = save_vendor_settings(data)
+        return jsonify({
+            "success": True,
+            "message": "Vendor profile settings updated successfully.",
+            "data": updated_settings
+        }), 200
+
