@@ -11,6 +11,8 @@ class AuthController:
         self.login_schema = LoginSchema()
         self.register_schema = UserCreateSchema()
         self.user_schema = UserSchema()
+        from app.schemas import UserUpdateSchema
+        self.update_schema = UserUpdateSchema()
 
     def login(self):
         """Processes user authentication and yields access & refresh tokens."""
@@ -79,4 +81,54 @@ class AuthController:
         return jsonify({
             "success": True,
             "data": self.user_schema.dump(user)
+        }), 200
+
+    @jwt_required()
+    def update_profile(self):
+        """Allows authenticated users to update their personal account profile."""
+        from app.repositories import UserRepository
+        user_id = get_jwt_identity()
+        user_repo = UserRepository()
+        user = user_repo.get_by_id(int(user_id))
+        
+        if not user:
+            raise APIException("User profile not found.", status_code=404)
+            
+        data = request.get_json() or {}
+        errors = self.update_schema.validate(data)
+        if errors:
+            return jsonify({"success": False, "message": "Validation failed.", "errors": errors}), 422
+            
+        # Check if email is already taken by another user
+        new_email = data.get("email")
+        if new_email and new_email.lower() != user.email.lower():
+            existing_user = user_repo.get_by_email(new_email)
+            if existing_user:
+                raise APIException("Email is already registered by another account.", status_code=409)
+            user.email = new_email
+            
+        # Update names
+        user.first_name = data.get("first_name")
+        user.last_name = data.get("last_name")
+        
+        # Hash new password if supplied
+        password = data.get("password")
+        if password:
+            user.set_password(password)
+            
+        # Save updates
+        user_repo.update(user)
+        
+        return jsonify({
+            "success": True,
+            "message": "Profile updated successfully.",
+            "data": {
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "role": user.role.name
+                }
+            }
         }), 200

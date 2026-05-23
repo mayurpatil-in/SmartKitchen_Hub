@@ -1,4 +1,4 @@
-from app.schemas.user_schema import UserSchema, UserCreateSchema, LoginSchema
+from app.schemas.user_schema import UserSchema, UserCreateSchema, LoginSchema, UserUpdateSchema
 from app.schemas.product_schema import ProductSchema, CategorySchema
 from app.schemas.customer_schema import CustomerSchema
 from app.schemas.quotation_schema import QuotationSchema, QuotationItemSchema
@@ -10,6 +10,7 @@ from app.schemas.notification_schema import NotificationSchema
 __all__ = [
     'UserSchema',
     'UserCreateSchema',
+    'UserUpdateSchema',
     'LoginSchema',
     'ProductSchema',
     'CategorySchema',

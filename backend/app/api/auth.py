@@ -23,3 +23,8 @@ def refresh():
 def me():
     """Endpoint to retrieve verified user details."""
     return auth_controller.me()
+
+@auth_bp.route("/profile", methods=["PUT"])
+def update_profile():
+    """Endpoint to allow authenticated users to edit their profile."""
+    return auth_controller.update_profile()

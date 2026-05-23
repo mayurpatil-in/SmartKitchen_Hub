@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { logout } from '../redux/slices/authSlice';
+import { logout, updateUser } from '../redux/slices/authSlice';
 import { addToast } from '../redux/slices/notificationSlice';
 import API from '../api';
+import Modal from '../components/Modal';
 import { 
   LayoutDashboard, Utensils, Users, FileText, Package, 
   ShoppingCart, Wrench, Bell, LogOut, Menu, X, 
@@ -21,6 +22,65 @@ const MainLayout = ({ children }) => {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // Profile settings state
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileFirstName, setProfileFirstName] = useState('');
+  const [profileLastName, setProfileLastName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profilePassword, setProfilePassword] = useState('');
+  const [profileConfirmPassword, setProfileConfirmPassword] = useState('');
+  const [isProfileSubmitting, setIsProfileSubmitting] = useState(false);
+
+  const handleOpenProfile = () => {
+    setProfileFirstName(user?.first_name || '');
+    setProfileLastName(user?.last_name || '');
+    setProfileEmail(user?.email || '');
+    setProfilePassword('');
+    setProfileConfirmPassword('');
+    setIsProfileOpen(true);
+  };
+
+  const handleProfileSubmit = async (e) => {
+    e.preventDefault();
+    if (!profileFirstName.trim() || !profileLastName.trim() || !profileEmail.trim()) {
+      dispatch(addToast({ type: 'warning', message: 'First name, last name, and email are required.' }));
+      return;
+    }
+    if (profilePassword) {
+      if (profilePassword.length < 6) {
+        dispatch(addToast({ type: 'warning', message: 'Password must be at least 6 characters.' }));
+        return;
+      }
+      if (profilePassword !== profileConfirmPassword) {
+        dispatch(addToast({ type: 'warning', message: 'Passwords do not match.' }));
+        return;
+      }
+    }
+
+    try {
+      setIsProfileSubmitting(true);
+      const payload = {
+        first_name: profileFirstName.trim(),
+        last_name: profileLastName.trim(),
+        email: profileEmail.trim()
+      };
+      if (profilePassword) {
+        payload.password = profilePassword;
+      }
+
+      const res = await API.put('/auth/profile', payload);
+      if (res.success) {
+        dispatch(updateUser(res.data.user));
+        dispatch(addToast({ type: 'success', message: 'Your profile has been updated successfully.' }));
+        setIsProfileOpen(false);
+      }
+    } catch (err) {
+      dispatch(addToast({ type: 'error', message: err.message }));
+    } finally {
+      setIsProfileSubmitting(false);
+    }
+  };
   
   // AI chatbot state
   const [isAiOpen, setIsAiOpen] = useState(false);
@@ -243,13 +303,17 @@ const MainLayout = ({ children }) => {
           )}
 
           {/* Profile Quick Tag */}
-          <div className="flex items-center gap-2 bg-slate-800/60 pl-2 pr-3 py-1 rounded-full border border-slate-800">
+          <button 
+            onClick={handleOpenProfile}
+            title="Edit My Profile"
+            className="flex items-center gap-2 bg-slate-800/60 hover:bg-slate-750 active:scale-95 pl-2 pr-3 py-1 rounded-full border border-slate-800 focus:outline-none transition-all cursor-pointer select-none text-left"
+          >
             <UserCircle className="w-5 h-5 text-emerald-500" />
             <div className="text-left hidden md:block">
               <p className="text-[10px] font-bold leading-tight">{user?.first_name} {user?.last_name}</p>
               <p className="text-[8px] text-slate-400 font-semibold uppercase tracking-wider">{user?.role}</p>
             </div>
-          </div>
+          </button>
 
           {/* Logout Button */}
           <button 
@@ -417,6 +481,122 @@ const MainLayout = ({ children }) => {
           </div>
         )}
       </div>
+
+      {/* PERSONAL PROFILE MODAL */}
+      <Modal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        title="Personal Profile Settings"
+        size="md"
+      >
+        <form onSubmit={handleProfileSubmit} className="space-y-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-5 h-5 rounded-md bg-emerald-600 flex items-center justify-center">
+              <UserCircle className="w-3 h-3 text-white" />
+            </div>
+            <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Account Details</span>
+            <div className="flex-grow h-px bg-gradient-to-r from-slate-200 to-transparent" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                First Name *
+              </label>
+              <input
+                type="text" required
+                value={profileFirstName}
+                onChange={(e) => setProfileFirstName(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all bg-white font-medium"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Last Name *
+              </label>
+              <input
+                type="text" required
+                value={profileLastName}
+                onChange={(e) => setProfileLastName(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all bg-white font-medium"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Email Address *
+            </label>
+            <input
+              type="email" required
+              value={profileEmail}
+              onChange={(e) => setProfileEmail(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all bg-white font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 mt-4 mb-3">
+            <div className="w-5 h-5 rounded-md bg-slate-800 flex items-center justify-center">
+              <span className="text-[10px] font-black text-white">**</span>
+            </div>
+            <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Change Password</span>
+            <div className="flex-grow h-px bg-gradient-to-r from-slate-200 to-transparent" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                New Password
+              </label>
+              <input
+                type="password"
+                placeholder="••••••"
+                value={profilePassword}
+                onChange={(e) => setProfilePassword(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all bg-white font-medium"
+              />
+            </div>
+            <div>
+              <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                placeholder="••••••"
+                value={profileConfirmPassword}
+                onChange={(e) => setProfileConfirmPassword(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all bg-white font-medium"
+              />
+            </div>
+          </div>
+
+          <p className="text-[10px] text-slate-400 font-semibold italic">
+            * Leave password fields blank if you do not wish to change your current password.
+          </p>
+
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 mt-2">
+            <button
+              type="button" onClick={() => setIsProfileOpen(false)}
+              className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit" disabled={isProfileSubmitting}
+              className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all hover:scale-105 active:scale-95 disabled:opacity-70"
+            >
+              {isProfileSubmitting ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Profile'
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

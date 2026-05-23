@@ -16,6 +16,13 @@ class UserCreateSchema(UserSchema):
     """Schema validation for new user creation requests."""
     password = fields.Str(required=True, validate=validate.Length(min=6, max=100))
 
+class UserUpdateSchema(Schema):
+    """Schema validation for user profile update requests."""
+    email = fields.Email(required=True, validate=validate.Length(max=120))
+    first_name = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    last_name = fields.Str(required=True, validate=validate.Length(min=1, max=50))
+    password = fields.Str(load_only=True, validate=validate.Length(min=6, max=100))
+
 class LoginSchema(Schema):
     """Schema validation for user login requests."""
     email = fields.Email(required=True)
